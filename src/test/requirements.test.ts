@@ -18,6 +18,7 @@ vi.mock('@/lib/db', () => ({
         find: vi.fn(),
         create: vi.fn(),
         updateOne: vi.fn(),
+        findByIdAndUpdate: vi.fn(),
     },
     OrderModel: {
         find: vi.fn(),
