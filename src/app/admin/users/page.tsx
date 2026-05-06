@@ -34,7 +34,7 @@ export default function UsersAdmin() {
         <TableBody>
           {users.map(u => (
             <TableRow key={u._id}>
-              <TableCell>{u.phone.replace(/(\+\d{5})\d{4}(\d{3})/, '$1****$2')}</TableCell>
+              <TableCell>{u.phone.replace(/(\+\d{1,4})\d+(\d{4})$/, '$1****$2')}</TableCell>
               <TableCell>{u.name || '-'}</TableCell>
               <TableCell className="text-xs font-medium uppercase tracking-wider">{u.role}</TableCell>
               <TableCell className="text-right">
