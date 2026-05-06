@@ -1,4 +1,14 @@
 services:
+  app:
+    image: bouncytorch/iapteca:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongo:27017/iapteca?authSource=admin
+    depends_on:
+      mongo:
+        condition: service_healthy
+
   mongo:
     image: mongo:7.0
     restart: always

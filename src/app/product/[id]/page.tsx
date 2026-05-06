@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { ProductCard } from '@/components/ProductCard';
 import Image from 'next/image';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   await connectDB();
   const med = await MedicationModel.findById((await params).id).lean();
