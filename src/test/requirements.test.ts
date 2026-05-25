@@ -22,6 +22,7 @@ vi.mock('@/lib/db', () => ({
         updateOne: vi.fn(),
         findById: vi.fn(),
         findByIdAndUpdate: vi.fn(),
+        findOneAndUpdate: vi.fn(),
         exists: vi.fn(),
     },
     OrderModel: {
@@ -111,14 +112,8 @@ describe('iApteca Requirements Tests', () => {
 
     it('Тест 3: Замовлення створюється зі статусом PENDING', async () => {
         (getAuthUser as Mock).mockResolvedValue({ _id: 'user123', role: 'CUSTOMER' });
-        const mockMed1 = { _id: 'med1', name: 'Товар 1', stock: 10, save: vi.fn() };
-        const mockMed2 = { _id: 'med2', name: 'Товар 2', stock: 5, save: vi.fn() };
 
-        (MedicationModel.findById as Mock).mockImplementation((id) => ({
-            session: vi.fn().mockResolvedValue(id === 'med1' ? mockMed1 : mockMed2)
-        }));
-        (OrderModel.create as Mock).mockResolvedValue([{ _id: 'order_unique_id' }]);
-
+        (MedicationModel.findOneAndUpdate as Mock).mockResolvedValue({ _id: 'med1', name: 'Товар 1', stock: 10 });
         const orderData = {
             items: [
                 { medication: 'med1', quantity: 1, price: 100 },
@@ -126,6 +121,8 @@ describe('iApteca Requirements Tests', () => {
             ],
             total: 300
         };
+
+        (OrderModel.create as Mock).mockResolvedValue([{ _id: 'order_unique_id' }]);
 
         const req = new Request('http://localhost/api/orders', {
             method: 'POST',

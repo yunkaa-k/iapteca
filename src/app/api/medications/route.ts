@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB, MedicationModel } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
-import { logger } from '@/lib/logger';
 
 export async function GET(req: Request) {
   await connectDB();

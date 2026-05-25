@@ -13,3 +13,15 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
+
+export async function DELETE() {
+  try {
+    const user = await getAuthUser();
+    if (!user) return NextResponse.json({ error: 'Auth' }, { status: 401 });
+    await connectDB();
+    await UserModel.findByIdAndDelete(user._id);
+    return new NextResponse(null, { status: 204 });
+  } catch {
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
+}
