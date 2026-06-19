@@ -1,23 +1,80 @@
 'use client';
+import { useState } from 'react';
 import { useCartStore } from '@/lib/store/cartStore';
 import { useAuthStore } from '@/lib/store/authStore';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CreditCard, CheckCircle2 } from 'lucide-react';
+import { CreditCard, CheckCircle2, Ticket, X } from 'lucide-react';
 
 export default function CheckoutPage() {
   const { items, clearCart } = useCartStore();
   const { user } = useAuthStore();
   const router = useRouter();
-  const total = items.reduce((a, i) => a + i.price * i.quantity, 0);
+  const subtotal = items.reduce((a, i) => a + i.price * i.quantity, 0);
+
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discount: number;
+    finalTotal: number;
+    discountType: string;
+    discountValue: number;
+  } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState('');
+
+  const total = appliedPromo ? appliedPromo.finalTotal : subtotal;
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoError('');
+    try {
+      const res = await fetch('/api/promo-codes/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: promoCode, subtotal }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setAppliedPromo({
+          code: promoCode.toUpperCase().trim(),
+          discount: data.discount,
+          finalTotal: data.finalTotal,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+        });
+        toast.success(`Промокод застосовано! Знижка: ${data.discount} ₴`);
+      } else {
+        setPromoError(data.error || 'Невірний промокод');
+        setAppliedPromo(null);
+      }
+    } catch {
+      setPromoError('Помилка перевірки промокоду');
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoCode('');
+    setPromoError('');
+  };
 
   const handleOrder = async () => {
     if (!user) return router.push('/login');
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
-        body: JSON.stringify({ items: items.map(i => ({ medication: i._id, quantity: i.quantity, price: i.price })), total, user: user._id })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map(i => ({ medication: i._id, quantity: i.quantity, price: i.price })),
+          total: subtotal,
+          promoCode: appliedPromo?.code || undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -46,6 +103,53 @@ export default function CheckoutPage() {
             </div>
           ))}
         </div>
+
+        {/* Промокод */}
+        <div className="border-t pt-4 space-y-2">
+          <label className="text-sm font-medium flex items-center gap-1">
+            <Ticket className="w-4 h-4" /> Промокод
+          </label>
+          {appliedPromo ? (
+            <div className="flex items-center justify-between bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+              <span className="text-sm font-mono font-bold text-green-700 dark:text-green-400">
+                {appliedPromo.code}
+                <span className="font-normal ml-2">
+                  (−{appliedPromo.discountType === 'PERCENTAGE' ? `${appliedPromo.discountValue}%` : `${appliedPromo.discountValue} ₴`})
+                </span>
+              </span>
+              <button onClick={handleRemovePromo} className="text-green-600 hover:text-red-500 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                placeholder="Введіть промокод"
+                value={promoCode}
+                onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoError(''); }}
+                className="font-mono"
+              />
+              <Button variant="outline" onClick={handleApplyPromo} disabled={promoLoading || !promoCode.trim()}>
+                {promoLoading ? '...' : 'Застосувати'}
+              </Button>
+            </div>
+          )}
+          {promoError && <p className="text-sm text-red-500">{promoError}</p>}
+        </div>
+
+        {/* Підсумок */}
+        {appliedPromo && (
+          <div className="flex justify-between text-sm opacity-70">
+            <span>Підсумок без знижки:</span>
+            <span>{subtotal} ₴</span>
+          </div>
+        )}
+        {appliedPromo && (
+          <div className="flex justify-between text-sm text-green-600 dark:text-green-400 font-medium">
+            <span>Знижка:</span>
+            <span>−{appliedPromo.discount} ₴</span>
+          </div>
+        )}
         <div className="border-t pt-4 font-bold flex justify-between text-lg">
           <span>Разом:</span>
           <span className="text-primary">{total} ₴</span>
@@ -57,3 +161,4 @@ export default function CheckoutPage() {
     </div>
   );
 }
+
