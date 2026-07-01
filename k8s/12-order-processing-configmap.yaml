@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-processing-config
+  namespace: iapteca
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  SERVICE_NAME: "order-processing"
+  SERVICE_PORT: "3002"
+  API_GATEWAY_URL: "http://api-gateway:8000"
+  QUEUE_WORKERS: "5"
+  MAX_RETRIES: "3"
+  BATCH_SIZE: "100"

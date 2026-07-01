@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-processing
+  namespace: iapteca
+  labels:
+    app: order-processing
+    tier: service
+    role: processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-processing
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: order-processing
+        tier: service
+        role: processor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3002"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: order-processing-sa
+      containers:
+      - name: order-processing
+        image: bouncytorch/iapteca:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3002
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: NODE_ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: LOG_LEVEL
+        - name: SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: SERVICE_NAME
+        - name: SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: SERVICE_PORT
+        - name: QUEUE_WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: QUEUE_WORKERS
+        - name: MAX_RETRIES
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: MAX_RETRIES
+        - name: BATCH_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: BATCH_SIZE
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: order-processing-secret
+              key: MONGODB_URI
+        - name: DB_WRITE_ENABLED
+          valueFrom:
+            secretKeyRef:
+              name: order-processing-secret
+              key: DB_WRITE_ENABLED
+        - name: API_GATEWAY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: order-processing-config
+              key: API_GATEWAY_URL
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "300m"
+          limits:
+            memory: "1Gi"
+            cpu: "600m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3002
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - order-processing
+              topologyKey: kubernetes.io/hostname

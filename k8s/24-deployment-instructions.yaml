@@ -1,0 +1,100 @@
+# Kubernetes Deployment Instructions for iapteca Microservices
+# 
+# Prerequisites:
+# - Minikube installed and running
+# - kubectl configured
+# - Docker images built (bouncytorch/iapteca:latest)
+#
+# Order of deployment (execute in order):
+# 
+# 1. kubectl apply -f 01-namespace.yaml
+#    Creates the iapteca namespace for resource isolation
+#
+# 2. kubectl apply -f 02-mongodb-secret.yaml
+#    Creates MongoDB admin credentials
+#
+# 3. kubectl apply -f 03-mongodb-configmap.yaml
+#    MongoDB configuration
+#
+# 4. kubectl apply -f 04-mongodb-pvc.yaml
+#    PersistentVolumeClaim for MongoDB storage
+#
+# 5. kubectl apply -f 05-mongodb-deployment.yaml
+#    Deploys MongoDB instance (wait for ready before next step)
+#
+# 6. kubectl apply -f 06-mongodb-service.yaml
+#    Exposes MongoDB internally
+#
+# 7. kubectl apply -f 07-product-catalog-secret.yaml
+#    Product-Catalog credentials (READ-ONLY access)
+#
+# 8. kubectl apply -f 08-product-catalog-configmap.yaml
+#    Product-Catalog environment configuration
+#
+# 9. kubectl apply -f 09-product-catalog-deployment.yaml
+#    Deploys Product-Catalog service (read-only database access)
+#
+# 10. kubectl apply -f 10-product-catalog-service.yaml
+#     Exposes Product-Catalog internally
+#
+# 11. kubectl apply -f 11-order-processing-secret.yaml
+#     Order-Processing credentials (WRITE access)
+#
+# 12. kubectl apply -f 12-order-processing-configmap.yaml
+#     Order-Processing environment configuration
+#
+# 13. kubectl apply -f 13-order-processing-deployment.yaml
+#     Deploys Order-Processing service (write-enabled database access)
+#
+# 14. kubectl apply -f 14-order-processing-service.yaml
+#     Exposes Order-Processing internally
+#
+# 15. kubectl apply -f 15-api-gateway-secret.yaml
+#     API Gateway secrets (JWT key, API key)
+#
+# 16. kubectl apply -f 16-api-gateway-configmap.yaml
+#     API Gateway configuration (nginx.conf)
+#
+# 17. kubectl apply -f 17-api-gateway-deployment.yaml
+#     Deploys API Gateway (nginx)
+#
+# 18. kubectl apply -f 18-api-gateway-service.yaml
+#     Exposes API Gateway externally (LoadBalancer)
+#
+# 19. kubectl apply -f 19-networkpolicy.yaml
+#     Network policies for service-to-service communication
+#
+# 20. kubectl apply -f 20-rbac.yaml
+#     Role-based access control
+#
+# 21. kubectl apply -f 21-hpa.yaml
+#     Horizontal Pod Autoscalers
+#
+# 22. kubectl apply -f 22-resourcequota.yaml
+#     Resource quotas and limits
+#
+# 23. kubectl apply -f 23-poddisruptionbudget.yaml
+#     Pod disruption budgets for availability
+#
+# Full deployment:
+# kubectl apply -f ./ --namespace=iapteca
+#
+# Or individually:
+# for i in {01..23}; do kubectl apply -f $(printf "%02d" $i)-*.yaml; sleep 5; done
+#
+# Verify deployment:
+# kubectl get all -n iapteca
+# kubectl get pods -n iapteca -w
+# kubectl logs -n iapteca -f deployment/product-catalog
+# kubectl logs -n iapteca -f deployment/order-processing
+# kubectl logs -n iapteca -f deployment/mongodb
+#
+# Port forwarding:
+# kubectl port-forward -n iapteca svc/api-gateway 8080:80
+# kubectl port-forward -n iapteca svc/mongodb 27017:27017
+#
+# Get API Gateway external IP:
+# kubectl get service api-gateway -n iapteca
+#
+# Delete all resources:
+# kubectl delete namespace iapteca
