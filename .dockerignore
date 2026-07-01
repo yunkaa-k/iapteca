@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+.env*
+coverage
+*.md
+k6
+k8s
+docs
+.vercel
+*.tsbuildinfo
+next-env.d.ts
