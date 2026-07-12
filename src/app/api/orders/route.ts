@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { connectDB, OrderModel, MedicationModel } from '@/lib/db';
+import { connectDB, OrderModel, MedicationModel, PromoCodeModel } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import mongoose from 'mongoose';
 import { logger } from '@/lib/logger';
 import { metrics } from '@/lib/metrics';
+import { calculateDiscount } from '@/lib/promo';
 
 export async function GET(req: Request) {
   const startTime = Date.now();
@@ -23,6 +24,29 @@ export async function GET(req: Request) {
   return NextResponse.json(orders);
 }
 
+/**
+ * Валідує промокод і повертає дані для знижки.
+ * Повертає null, якщо промокод не вказано.
+ * Кидає Error, якщо промокод недійсний.
+ */
+async function validatePromoCode(promoCodeStr: string | undefined, subtotal: number, session?: mongoose.ClientSession) {
+  if (!promoCodeStr) return null;
+
+  const code = promoCodeStr.toUpperCase().trim();
+  const query = PromoCodeModel.findOne({ code });
+  const promo = session ? await query.session(session) : await query;
+
+  if (!promo) throw new Error('Промокод не знайдено');
+  if (!promo.isActive) throw new Error('Промокод неактивний');
+  if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) throw new Error('Термін дії промокоду закінчився');
+  if (promo.maxUses > 0 && promo.usedCount >= promo.maxUses) throw new Error('Ліміт використань вичерпано');
+  if (subtotal < promo.minOrderTotal) throw new Error(`Мінімальна сума замовлення: ${promo.minOrderTotal} ₴`);
+
+  const { discount, finalTotal } = calculateDiscount(subtotal, promo.discountType, promo.discountValue, promo.minOrderTotal);
+
+  return { code, discount, finalTotal, promoId: promo._id };
+}
+
 export async function POST(req: Request) {
   const startTime = Date.now();
   metrics.incrementCounter('http_requests_total', { method: 'POST', path: '/api/orders' });
@@ -35,7 +59,7 @@ export async function POST(req: Request) {
 
   await connectDB();
 
-  const { items, total } = await req.json();
+  const { items, total, promoCode: promoCodeStr } = await req.json();
   const MAX_RETRIES = 50;
   let retryCount = 0;
 
@@ -51,14 +75,25 @@ export async function POST(req: Request) {
 
         if (!med) throw new Error('Недостатньо товару');
 
-        const order = await OrderModel.create({
+        // Валідація промокоду
+        const promoResult = await validatePromoCode(promoCodeStr, total);
+
+        const orderData: Record<string, unknown> = {
           user: user._id,
           items,
-          total,
-          status: 'PENDING'
-        });
+          total: promoResult ? promoResult.finalTotal : total,
+          status: 'PENDING',
+        };
 
-        logger.info('order.created', { user_id: user._id.toString(), order_id: order._id.toString(), total });
+        if (promoResult) {
+          orderData.promoCode = promoResult.code;
+          orderData.discount = promoResult.discount;
+          await PromoCodeModel.findByIdAndUpdate(promoResult.promoId, { $inc: { usedCount: 1 } });
+        }
+
+        const order = await OrderModel.create(orderData);
+
+        logger.info('order.created', { user_id: user._id.toString(), order_id: order._id.toString(), total: orderData.total as number, promo: promoResult?.code });
         metrics.observeHistogram('http_request_duration_ms', Date.now() - startTime, { path: '/api/orders' });
         return NextResponse.json(order);
       } catch (error: unknown) {
@@ -100,17 +135,28 @@ export async function POST(req: Request) {
         if (!med) throw new Error('Недостатньо товару');
       }
 
-      const order = await OrderModel.create([{
+      // Валідація промокоду у транзакції
+      const promoResult = await validatePromoCode(promoCodeStr, total, session);
+
+      const orderData: Record<string, unknown> = {
         user: user._id,
         items,
-        total,
-        status: 'PENDING'
-      }], { session });
+        total: promoResult ? promoResult.finalTotal : total,
+        status: 'PENDING',
+      };
+
+      if (promoResult) {
+        orderData.promoCode = promoResult.code;
+        orderData.discount = promoResult.discount;
+        await PromoCodeModel.findByIdAndUpdate(promoResult.promoId, { $inc: { usedCount: 1 } }).session(session);
+      }
+
+      const order = await OrderModel.create([orderData], { session });
 
       await session.commitTransaction();
       session.endSession();
 
-      logger.info('order.created', { user_id: user._id.toString(), order_id: order[0]._id.toString(), total });
+      logger.info('order.created', { user_id: user._id.toString(), order_id: order[0]._id.toString(), total: orderData.total as number, promo: promoResult?.code });
       metrics.observeHistogram('http_request_duration_ms', Date.now() - startTime, { path: '/api/orders' });
       return NextResponse.json(order[0]);
     } catch (error: unknown) {
