@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-catalog
+  namespace: iapteca
+  labels:
+    app: product-catalog
+    tier: service
+spec:
+  type: ClusterIP
+  selector:
+    app: product-catalog
+  ports:
+  - port: 3001
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  sessionAffinity: ClientIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: product-catalog-sa
+  namespace: iapteca

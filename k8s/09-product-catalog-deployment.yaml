@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-catalog
+  namespace: iapteca
+  labels:
+    app: product-catalog
+    tier: service
+    role: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: product-catalog
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: product-catalog
+        tier: service
+        role: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: product-catalog-sa
+      containers:
+      - name: product-catalog
+        image: bouncytorch/iapteca:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3001
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: NODE_ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: LOG_LEVEL
+        - name: SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: SERVICE_NAME
+        - name: SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: SERVICE_PORT
+        - name: DB_READ_ONLY
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: DB_READ_ONLY
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: product-catalog-secret
+              key: MONGODB_URI
+        - name: API_GATEWAY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: API_GATEWAY_URL
+        - name: CACHE_TTL
+          valueFrom:
+            configMapKeyRef:
+              name: product-catalog-config
+              key: CACHE_TTL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3001
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - product-catalog
+              topologyKey: kubernetes.io/hostname
